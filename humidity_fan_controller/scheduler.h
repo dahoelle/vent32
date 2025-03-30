@@ -10,23 +10,62 @@ public:
     std::function<void()> callback;
   };
 
-private:
-    std::vector<Task> tasks;
-public:
+  using ErrorHandler = std::function<void(const String&)>;
+
+  void setErrorHandler(ErrorHandler handler) {
+    errorHandler = std::move(handler);
+  }
+
   void setInterval(std::function<void()> callback, unsigned long interval) {
-    tasks.push_back({interval, millis(), true, callback});
+    if (!callback) {
+      if (errorHandler) {
+        errorHandler("setInterval: Callback is null");
+      }
+      return;
+    }
+    if (interval == 0) {
+      if (errorHandler) {
+        errorHandler("setInterval: Interval cannot be zero");
+      }
+      return;
+    }
+    tasks.push_back({interval, millis(), true, std::move(callback)});
   }
 
   void setTimeout(std::function<void()> callback, unsigned long delay) {
-    tasks.push_back({delay, millis(), false, callback});
+    if (!callback) {
+      if (errorHandler) {
+        errorHandler("setTimeout: Callback is null");
+      }
+      return;
+    }
+    tasks.push_back({delay, millis(), false, std::move(callback)});
   }
 
-  void updateProcess(unsigned long delta) {
+  void updateProcess() {
     unsigned long currentTime = millis();
 
     for (auto it = tasks.begin(); it != tasks.end(); ) {
       if (currentTime - it->lastExecution >= it->interval) {
-        it->callback();
+        if (!it->callback) {
+          handleError("Callback invalid during execution");
+          it = tasks.erase(it);
+          continue;
+        }
+
+        try {
+          it->callback();  // Wrap callback execution in try-catch
+        } 
+        catch (const std::exception& e) {
+          handleError(String("Exception: ") + e.what());
+        } 
+        catch (const String& e) {
+          handleError(String("String Exception: ") + e);
+        } 
+        catch (...) {
+          handleError("Unknown exception occurred");
+        }
+
         it->lastExecution = currentTime;
 
         if (!it->repeat) {
@@ -37,4 +76,13 @@ public:
       ++it;
     }
   }
+
+private:
+  void handleError(const String& message) {
+    if (errorHandler) {
+      errorHandler(message);
+    }
+  }
+  std::vector<Task> tasks;
+  ErrorHandler errorHandler;
 };

@@ -12,9 +12,7 @@ Scheduler scheduler;
 
 float humidity = -999; 
 float tempC = -999;
-float threshold = 50.0;
 bool fanState = false;
-unsigned int minVentTime = 300;
 
 //-----EEPROM----------
 void setNetworkSettings(const NetworkSettings& settings) {
@@ -36,7 +34,26 @@ NetworkSettings getNetworkSettings() {
   settings.pass[31] = '\0';
   return settings;
 }
+void setThreshold(float value) {
+  EEPROM.put(THRESHOLD_ADDR, value);
+  EEPROM.commit();
+}
+float getThreshold() {
+  float value;
+  EEPROM.get(THRESHOLD_ADDR, value);
+  return value;
+}
 
+void setMinVentTime(unsigned int value) {
+  EEPROM.put(MIN_VENT_TIME_ADDR, value);
+  EEPROM.commit();
+}
+
+unsigned int getMinVentTime() {
+  unsigned int value;
+  EEPROM.get(MIN_VENT_TIME_ADDR, value);
+  return value;
+}
 
 //----VENT------------
 time_t ventTimeout = 0;
@@ -67,7 +84,7 @@ void checkVentilation() {
     }
   } else {
     // Automatic mode control
-    bool shouldVentilate = humidity > threshold;
+    bool shouldVentilate = humidity > getThreshold();
     if (fanState != shouldVentilate) {
       fanState = shouldVentilate;
       digitalWrite(PIN_RELAY_SIG, fanState ? HIGH : LOW);
@@ -80,21 +97,29 @@ void checkVentilation() {
 void setup_gpio(){
   Serial.begin(115200);
   
-  pinMode(PIN_RELAY_SIG, OUTPUT);
+  //pinMode(PIN_RELAY_SIG, OUTPUT);
   pinMode(PIN_RELAY_VCC, OUTPUT);
   pinMode(PIN_RELAY_GND, OUTPUT);
-  digitalWrite(PIN_RELAY_SIG, LOW);
+  //digitalWrite(PIN_RELAY_SIG, LOW);
   digitalWrite(PIN_RELAY_VCC, HIGH);
   digitalWrite(PIN_RELAY_GND, LOW);
 
   //vent state synchronizer
-  scheduler.setInterval(checkVentilation, 1000);
+  //scheduler.setInterval(checkVentilation, 1000);
+}
+void setup_scheduler(){
+  scheduler.setErrorHandler([](const String& msg) {
+    Serial.print("[ERROR] ");
+    Serial.println(msg);
+  });
 }
 void setup_eeprom(){
   if (!EEPROM.begin(EEPROM_SIZE)) {
     Serial.println("Failed to initialize EEPROM");
     ESP.restart();
   }
+  Serial.println(getThreshold());
+  Serial.println(getMinVentTime());
   networkSettings = getNetworkSettings();
 }
 void setup_sensors() {
@@ -190,7 +215,7 @@ void setup_webserver(){
   }
    //GET /
   server.on("/", HTTP_GET, [](AsyncWebServerRequest * request){
-    request->send(200, "text/html", rootHTML);
+    request->send_P(200, "text/html", rootHTML);
   });
 
   server.on("/state", HTTP_GET, [](AsyncWebServerRequest* request) {
@@ -207,7 +232,7 @@ void setup_webserver(){
   });
 
   server.on("/threshold", HTTP_GET, [](AsyncWebServerRequest *request) {
-    request->send(200, "application/json", "{\"threshold\":" + String(threshold, 1) + "}");
+    request->send(200, "application/json", "{\"threshold\":" + String(getThreshold(), 1) + "}");
   });
 
   server.on("/threshold", HTTP_PUT, [](AsyncWebServerRequest *request) {
@@ -221,12 +246,12 @@ void setup_webserver(){
       request->send(400, "text/plain", "Threshold must be between 0-100%");
       return;
     }
-    threshold = newThreshold;
-    request->send(200, "text/plain", "Threshold updated to " + String(threshold, 1) + "%");
+    setThreshold(newThreshold);
+    request->send(200, "text/plain", "Threshold updated to " + String(getThreshold(), 1) + "%");
   });
 
   server.on("/min-vent-time", HTTP_GET, [](AsyncWebServerRequest *request) {
-    request->send(200, "application/json", "{\"min_vent_time\":" + String(minVentTime) + "}");
+    request->send(200, "application/json", "{\"min_vent_time\":" + String(getMinVentTime()) + "}");
   });
 
   server.on("/min-vent-time", HTTP_PUT, [](AsyncWebServerRequest *request) {
@@ -241,8 +266,8 @@ void setup_webserver(){
       return;
     }
     
-    minVentTime = newTime;
-    request->send(200, "text/plain", "Minimum vent time updated to " + String(minVentTime) + "s");
+    setMinVentTime(newTime);
+    request->send(200, "text/plain", "Minimum vent time updated to " + String(getMinVentTime()) + "s");
   });
   //404
   server.onNotFound([](AsyncWebServerRequest *request) {  
@@ -255,7 +280,7 @@ void setup() {
   delay(5);
   std::vector<SetupTask> setupTasks = {
     {setup_gpio, "GPIO and PinMode"},
-    //{setup_filesys,"SPIFFS File System"},
+    {setup_scheduler,"Scheduler Err handling"},
     //{setup_oled, "OLED Display and Rendering"},
     {setup_eeprom, "EEPROM"},
     {setup_sensors, "Sensors and Estimations"},
@@ -289,9 +314,9 @@ void setup() {
 //==========PROC==========
 unsigned long lu = 0;
 void loop() {
-  unsigned long cmillis = millis();
-  unsigned long delta = cmillis - lu; 
-  lu = cmillis;  
+  //unsigned long cmillis = millis();
+  //unsigned long delta = cmillis - lu; 
+  //lu = cmillis;  
 
-  scheduler.updateProcess(delta);
+  scheduler.updateProcess(/*delta*/);
 }
