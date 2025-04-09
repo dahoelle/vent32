@@ -1,5 +1,6 @@
 #include <vector>
 #include <functional>
+#include <Arduino.h>
 
 class Scheduler {
 public:
@@ -11,7 +12,15 @@ public:
   };
 
 private:
-    std::vector<Task> tasks;
+  std::vector<Task> tasks;
+  
+  using ErrorHandler = void(*)(const char*);
+  static ErrorHandler currentErrorHandler;
+  
+  static void defaultErrorHandler(const char* err) {
+    Serial.println(err);
+  }
+
 public:
   void setInterval(std::function<void()> callback, unsigned long interval) {
     tasks.push_back({interval, millis(), true, callback});
@@ -26,7 +35,9 @@ public:
 
     for (auto it = tasks.begin(); it != tasks.end(); ) {
       if (currentTime - it->lastExecution >= it->interval) {
-        it->callback();
+        try {it->callback();} 
+        catch (const char* err) {currentErrorHandler(err);}
+        
         it->lastExecution = currentTime;
 
         if (!it->repeat) {
@@ -37,4 +48,10 @@ public:
       ++it;
     }
   }
+
+  static void setErrorHandler(ErrorHandler handler) {
+    currentErrorHandler = handler;
+  }
 };
+
+Scheduler::ErrorHandler Scheduler::currentErrorHandler = Scheduler::defaultErrorHandler;
