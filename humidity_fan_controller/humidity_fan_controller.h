@@ -96,7 +96,7 @@ const char rootHTML[] PROGMEM = R"=====(
   #toast{position:fixed;top:20px;left:20px;background:#444;color:#fff;padding:15px 25px;border-radius:8px;opacity:0;transform:translateY(-100%);transition:0.3s;pointer-events:none}
   #toast.show{opacity:1;transform:translateY(0)}
 </style></head><body>
-  <h2>SHT Ccontroller</h2>
+  <h2>SHT Controller</h2>
   <div id="toast"></div>
   <div class="status-container">
     <div class="status-box">💧 Humidity<div id="humidity-value">--%</div></div>
@@ -133,6 +133,41 @@ const char rootHTML[] PROGMEM = R"=====(
       toast.textContent = message;
       toast.classList.add('show');
       setTimeout(() => toast.classList.remove('show'), 2000);
+    }
+    
+    function showSettingsPopup(){
+      document.getElementById('settings-popup').style.display='block'
+    }
+    function closeSettingsPopup(){
+      document.getElementById('settings-popup').style.display='none'
+    }
+    function submitWifiConfig(e){
+      e.preventDefault();
+      const ssid = document.getElementById('ssid').value,
+            passkey = document.getElementById('passkey').value;
+            
+      if(ssid.length > 32 || passkey.length > 32) {
+        showToast('Max 32 characters!');
+        return;
+      }
+      
+      fetch('/wifi-config', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ssid, passkey})
+      })
+      .then(response => {
+        if(response.ok) {
+          showToast('WiFi config saved!');
+          closeSettingsPopup();
+        } else {
+          showToast('Failed to save config');
+        }
+      })
+      .catch(error => {
+        console.error(error);
+        showToast('Connection error');
+      });
     }
 
     function updateStatus(){
